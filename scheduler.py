@@ -9,7 +9,7 @@ import time
 
 logger = logging.getLogger(__name__)
 # Порог для алерта
-ALERT_THRESHOLD = 0.05
+ALERT_THRESHOLD = 0.01
 # Интервал уведомлений
 INTERVAL = 3600
 
