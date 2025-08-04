@@ -156,5 +156,5 @@ async def delete_user_subscription(user_id: int, ticker: str) -> None:
         DELETE FROM subscriptions
         WHERE user_id = (?)
         AND ticker = (?)
-        """, user_id, ticker)
+        """, (user_id, ticker, ))
         await db.commit()
