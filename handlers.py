@@ -4,7 +4,7 @@ from difflib import get_close_matches
 from aiogram import Router, types, F
 from aiogram.filters import Command
 
-from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, get_last_prices, get_coin_from_list, get_coins_from_list
+from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, get_last_prices, get_coin_from_list, get_coins_from_list, delete_user_subscription
 from coingecko import fetch_prices
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
@@ -188,7 +188,12 @@ async def handle_my_subs(message: types.Message) -> None:
     answer += f'Твои подписки:\n'
     for user_id, coin, last_alert in subs:
         answer += f'{markdown.bold(coin.upper())}\n'
-    await message.answer(answer, parse_mode=ParseMode.MARKDOWN_V2)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='Изменить', callback_data=f"change:subscriptions")]
+        ]
+    )
+    await message.answer(answer, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=kb)
 
 @router.message(F.text == 'Новая подписка')
 async def handle_add_new_sub(message: types.Message) -> None:
@@ -231,3 +236,36 @@ async def handle_user_settings(message: types.Message) -> None:
     :return:
     """
     await message.answer(f'Настройки ещё не реализованы')
+
+@router.callback_query(F.data.startswith('change:'))
+async def callback_change_subscriptions(callback: types.CallbackQuery):
+    """
+    Изменяет список подписок
+    :param callback:
+    :return:
+    """
+    logger.debug(f'Try to get subs')
+    subs = await get_user_subscriptions(callback.message.from_user.id)
+    logger.debug(f'User\'s subs: {subs}')
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f'{coin}', callback_data=f"delete:{coin}")]
+            for user_id, coin, last_alert in subs
+        ]
+    )
+    await callback.message.answer(f'Какую подписку изменить?', reply_markup=kb)
+
+@router.callback_query(F.data.startswith('delete:'))
+async def callback_delete_subscription(callback: types.CallbackQuery):
+    """
+    Удаляет подписку
+    :param callback:
+    :return:
+    """
+    ticker = callback.data.split(":")[1]
+    user_id = callback.message.from_user.id
+    try:
+        await delete_user_subscription(user_id, ticker)
+        await callback.message.answer(f'Подписка на {ticker} удалена')
+    except SQLError as error:
+        await callback.answer(f'Ошибка при удалении:\n{error}')

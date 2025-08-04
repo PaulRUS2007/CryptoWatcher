@@ -149,3 +149,12 @@ async def delete_old_prices(period: int) -> None:
         WHERE timestamp < (?)
         """, (now-period, ))
         await db.commit()
+
+async def delete_user_subscription(user_id: int, ticker: str) -> None:
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        DELETE FROM subscriptions
+        WHERE user_id = (?)
+        AND ticker = (?)
+        """, user_id, ticker)
+        await db.commit()
