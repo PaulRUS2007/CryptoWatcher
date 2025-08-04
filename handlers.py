@@ -253,7 +253,7 @@ async def callback_change_subscriptions(callback: types.CallbackQuery):
             for user_id, coin, last_alert in subs
         ]
     )
-    await callback.message.answer(f'Какую подписку изменить?', reply_markup=kb)
+    await callback.message.answer(f'Какую подписку удалить?', reply_markup=kb)
 
 @router.callback_query(F.data.startswith('delete:'))
 async def callback_delete_subscription(callback: types.CallbackQuery):
