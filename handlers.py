@@ -5,7 +5,8 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 
 from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, get_last_prices, get_coin_from_list, get_coins_from_list
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
+from coingecko import fetch_prices
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.enums.parse_mode import ParseMode
@@ -123,6 +124,7 @@ async def callback_subscribe(callback: types.CallbackQuery, state: FSMContext) -
         await state.set_state(SubscribeState.waiting_for_ticker)
     else:
         if await add_sub_to_db(callback.from_user.id, slug):
+            await fetch_prices([slug])
             logger.debug(f'User {callback.from_user.id} is not subscribed to {slug}')
             await callback.message.answer("Подписка добавлена!")
             await callback.message.answer(f"Вы подписались на {slug}")

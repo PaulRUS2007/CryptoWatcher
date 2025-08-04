@@ -19,6 +19,6 @@ if __name__ == "__main__":
     """
     Настраиваем логи и запускаем бота
     """
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     logger.info(f'Starting bot...')
     asyncio.run(main())
