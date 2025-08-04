@@ -245,7 +245,7 @@ async def callback_change_subscriptions(callback: types.CallbackQuery):
     :return:
     """
     logger.debug(f'Try to get subs')
-    subs = await get_user_subscriptions(callback.message.from_user.id)
+    subs = await get_user_subscriptions(callback.from_user.id)
     logger.debug(f'User\'s subs: {subs}')
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
