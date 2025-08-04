@@ -263,7 +263,7 @@ async def callback_delete_subscription(callback: types.CallbackQuery):
     :return:
     """
     ticker = callback.data.split(":")[1]
-    user_id = callback.message.from_user.id
+    user_id = callback.from_user.id
     try:
         await delete_user_subscription(user_id, ticker)
         await callback.message.answer(f'Подписка на {ticker} удалена')
