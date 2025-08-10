@@ -1,6 +1,6 @@
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from database import get_coins, add_coins_to_list, get_coins_from_list, add_prices, get_last_prices, get_user_subscriptions_by_ticker, delete_old_prices, update_last_alert
+from database import get_coins, add_coins_to_list, get_coins_from_list, add_prices, get_last_prices_for_subs_list, get_user_subscriptions_by_ticker, delete_old_prices, update_last_alert, get_max_interval_from_subscriptions, get_last_prices_for_ticker
 from coingecko import fetch_prices, fetch_coins_list
 from aiogram import Bot
 from aiogram.enums.parse_mode import ParseMode
@@ -9,9 +9,9 @@ import time
 
 logger = logging.getLogger(__name__)
 # Порог для алерта
-ALERT_THRESHOLD = 0.01
+# ALERT_THRESHOLD = 0.01
 # Интервал уведомлений
-INTERVAL = 3600
+# INTERVAL = 3600
 
 async def get_subscribed_users(coins: list):
     """
@@ -41,34 +41,42 @@ async def add_new_prices(prices: dict, now: time.time):
         new_prices.append((price, usd, now))
     await add_prices(new_prices)  # добавляем текущие цены в БД
 
-async def send_message(bot: Bot, ticker: str, now: time.time, timestamp: time.time, users: dict, diff: int, current_price: int) -> None:
+async def send_message(bot: Bot, ticker: str, now: time.time, timestamp: time.time, subscription: list, diff: int, current_price: int) -> None:
     """
     Отправляет алерт
+    :param subscription:
     :param current_price:
     :param diff:
     :param bot:
     :param ticker:
     :param now:
     :param timestamp:
-    :param users:
     :return:
     """
     change_time = int(round((now - timestamp) / 60, 0))
+    change_hours = int(change_time // 60)
+    change_minutes = int(change_time % 60)
     change_text = ''
-    if change_time == 1 or (change_time % 10 == 1 and change_time != 11):
-        change_text = f'последнюю {change_time} минуту'
-    elif 1 < change_time % 10 <= 4:
-        change_text = f'последние {change_time} минуты'
-    elif 4 < change_time % 10 <= 10 or change_time == 11 or change_time % 10 == 0:
-        change_text = f'последние {change_time} минут'
+    change_text_hours = ''
+    if change_hours == 1 or change_hours == 21 and change_hours != 11:
+        change_text_hours = f'последний {change_hours} час'
+    elif 1 < change_hours % 10  <= 4 and (change_hours < 10 or change_hours > 20):
+        change_text_hours = f'последние {change_hours} часа'
+    elif 4 < change_hours % 10 <= 10 or change_hours == 11 or change_hours % 10 == 0 or (11 < change_hours <= 14):
+        change_text_hours = f'последние {change_hours} часов'
+    if change_minutes == 1 or (change_minutes % 10 == 1 and change_minutes != 11):
+        change_text = f'последнюю {change_minutes} минуту' if change_hours == 0 else f'{change_text_hours} {change_minutes} минуту'
+    elif 1 < change_minutes % 10 <= 4 and (change_minutes < 10 or change_minutes > 20):
+        change_text = f'последние {change_minutes} минуты' if change_hours == 0 else f'{change_text_hours} {change_minutes} минуты'
+    elif 4 < change_minutes % 10 <= 10 or change_minutes == 11 or change_minutes % 10 == 0 or (11 < change_minutes <= 14):
+        change_text = f'последние {change_minutes} минут' if change_hours == 0 else f'{change_text_hours} {change_minutes} минут'
 
     sign = "📈" if diff > 0 else "📉"
     diff_text = f'вырос' if diff > 0 else f'упал'
     msg = f'{sign} {markdown.bold(ticker.upper())} {markdown.bold(diff_text)} на {markdown.code(f'{diff}%')} за {change_text}\!\nТекущая цена: {markdown.code(f'${current_price}')}'
-    # msg = Text.as_markdown(msg)
     logger.debug(f'Message to send: {msg}')
-    for user, last_alert in users[ticker]:
-        if now - last_alert > INTERVAL:
+    for user, last_alert, alert_threshold, interval in subscription:
+        if now - last_alert > interval:
             await bot.send_message(user, msg, parse_mode=ParseMode.MARKDOWN_V2)
             await update_last_alert(user, ticker)
 
@@ -77,15 +85,38 @@ async def check_prices(bot: Bot):
     logger.info(f'Coins for checking prices: {coins}')
     if not coins:
         return
-    price_history = await get_last_prices(coins, 3600)
-    logger.debug(f'Price history: {price_history}, type: {type(price_history)}')
     tickers, user_map = await get_subscribed_users(coins)
+    # interval = (await get_max_interval_from_subscriptions())[0][0]
+    # price_history = await get_last_prices_for_subs_list(coins, interval)
+    # logger.debug(f'Price history: {price_history}, type: {type(price_history)}')
     logger.debug(f'User map: {user_map}')
     logger.debug(f'Tickers: {tickers}')
     prices = await fetch_prices(list(tickers))
     now = int(time.time())
     await add_new_prices(prices, now)
-    for ticker in tickers:
+    for ticker, sub in user_map.items():
+        threshold = (sub[0][2]) / 100
+        interval = sub[0][3]
+        price_history = await get_last_prices_for_ticker(ticker, interval)
+        current_price = prices.get(ticker, {}).get('usd')
+        if current_price is None:
+            continue
+        # history = [x for y in price_history for x in y if ticker in x]
+        for ticker_name, price, timestamp in price_history:
+            if abs(current_price - price)/price > threshold:
+                diff = round((current_price - price)/price * 100, 2)
+                await send_message(
+                    bot=bot,
+                    ticker=ticker,
+                    now=now,
+                    timestamp=timestamp,
+                    subscription=sub,
+                    diff=diff,
+                    current_price=current_price,
+                )
+                break
+
+"""    for ticker in tickers:
         current_price = prices.get(ticker, {}).get('usd')
         if current_price is None:
             continue
@@ -102,7 +133,7 @@ async def check_prices(bot: Bot):
                     diff=diff,
                     current_price=current_price,
                 )
-                break
+                break"""
 
 
 async def coins_list_worker() -> None:

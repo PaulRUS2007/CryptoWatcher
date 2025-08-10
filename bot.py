@@ -9,6 +9,7 @@ import os
 load_dotenv()
 logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv(f'TELEGRAM_API_KEY')
+LOG_LEVEL = os.getenv(f'LOG_LEVEL')
 
 async def main():
     bot = Bot(token=BOT_TOKEN)
@@ -21,6 +22,6 @@ if __name__ == "__main__":
     """
     Настраиваем логи и запускаем бота
     """
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=LOG_LEVEL)
     logger.info(f'Starting bot...')
     asyncio.run(main())
