@@ -143,6 +143,7 @@ async def process_manual_ticker(message: types.Message, state: FSMContext):
     :return:
     """
     ticker = message.text.strip().lower()
+    success = False
     if not ticker.isalpha():
         await message.answer("Некорректный тикер. Попробуйте ещё раз.")
         return
@@ -154,7 +155,7 @@ async def process_manual_ticker(message: types.Message, state: FSMContext):
             await message.answer(f"Вы подписались на {ticker}")
         else:
             await message.answer(f'Вы уже были подписаны на {ticker} ранее')
-        # await state.clear()
+        success = True
     except SQLError as error:
         coins = await get_coins_from_list()
         coins_list = []
@@ -171,7 +172,10 @@ async def process_manual_ticker(message: types.Message, state: FSMContext):
         )
         await message.reply(f'Возможно имелось ввиду:', reply_markup=kb)
     finally:
-        await state.clear()
+        if success:
+            await state.clear()
+        else:
+            return
         # await state.set_state(SubscribeState.waiting_for_ticker)
 
 @router.message(F.text=='Мои подписки')
