@@ -191,7 +191,15 @@ async def handle_my_subs(message: types.Message) -> None:
     answer = ''
     answer += f'Твои подписки:\n'
     for user_id, coin, last_alert, alert_threshold, interval in subs:
-        answer += f'{markdown.bold(coin.upper())}\n'
+        interval = int(interval / 3600)
+        change_text_hours = ''
+        if interval == 1 or interval == 21 and interval != 11:
+            change_text_hours = f'{interval} час'
+        elif 1 < interval % 10 <= 4 and (interval < 10 or interval > 20):
+            change_text_hours = f'{interval} часа'
+        elif 4 < interval % 10 <= 10 or interval == 11 or interval % 10 == 0 or (11 < interval <= 14):
+            change_text_hours = f'{interval} часов'
+        answer += f'{markdown.bold(coin.upper())}, текущие настройки: порог {markdown.code(f'{alert_threshold}%')}, интервал {markdown.code(f'{change_text_hours}')}\n'
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text='Изменить', callback_data=f"change:subscriptions")]
