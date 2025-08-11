@@ -299,16 +299,10 @@ async def callback_change_coin_settings(callback: types.CallbackQuery):
     timeout = int(timeout/3600)
     if (timeout < 1) or (timeout > 24):
         raise ValueError
-    if (timeout == 1) or (timeout == 21):
-        hours = 'час'
-    elif (1 < timeout < 5) or (21 < timeout < 25):
-        hours = 'часа'
-    else:
-        hours = 'часов'
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=f'Порог для уведомлений, в процентах (сейчас {int(threshold)}%)', callback_data=f'manual_settings:threshold:{ticker}')],
-            [InlineKeyboardButton(text=f'Таймаут уведомлений (сейчас {int(timeout)} {hours})', callback_data=f'manual_settings:timeout:{ticker}')],
+            [InlineKeyboardButton(text=f'Порог для уведомлений', callback_data=f'manual_settings:threshold:{ticker}')],
+            [InlineKeyboardButton(text=f'Таймаут уведомлений', callback_data=f'manual_settings:timeout:{ticker}')],
             [InlineKeyboardButton(text=f'Удалить {ticker}', callback_data=f'delete:{ticker}')]
         ]
     )
