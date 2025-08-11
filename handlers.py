@@ -29,8 +29,7 @@ def get_main_menu() -> ReplyKeyboardMarkup:
     """
     keyboard = [
         [KeyboardButton(text=f'Текущие цены')],
-        [KeyboardButton(text=f'Мои подписки')],
-        [KeyboardButton(text=f'Новая подписка')],
+        [KeyboardButton(text=f'Мои подписки'),KeyboardButton(text=f'Новая подписка')],
     ]
     return ReplyKeyboardMarkup(
         keyboard=keyboard,

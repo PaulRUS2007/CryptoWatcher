@@ -91,11 +91,19 @@ async def get_coins():
 
 async def delete_coins(coin: str):
     async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("""
-        DELETE FROM coins
+        cursor = await db.execute("""
+        SELECT user_id
+        FROM subscriptions
         WHERE ticker = (?)
         """, (coin, ))
-        await db.commit()
+        subs = await cursor.fetchall()
+        print(f'Subs: {subs}')
+        if not subs:
+            await db.execute("""
+            DELETE FROM coins
+            WHERE ticker = (?)
+            """, (coin, ))
+            await db.commit()
 
 async def add_coins_to_list(coins: list[tuple] or dict):
     async with aiosqlite.connect(DB_FILE) as db:
