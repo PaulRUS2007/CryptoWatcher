@@ -265,7 +265,7 @@ async def callback_change_subscriptions(callback: types.CallbackQuery):
     logger.debug(f'User\'s subs: {subs}')
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=f'{coin}', callback_data=f"change_coin:{coin}")]
+            [InlineKeyboardButton(text=f'{coin.upper()}', callback_data=f"change_coin:{coin}")]
             for user_id, coin, last_alert, alert_threshold, interval in subs
         ]
     )
