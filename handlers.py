@@ -235,10 +235,16 @@ async def handle_get_prices(message: types.Message) -> None:
         if price:
             current_price = price[0]  # Последняя цена из БД
             last_price = price[-1]  # Самая ранняя цена из БД, но не ранее 24 часов
+            min_price = min(price, key=lambda item: item[1])
+            max_price = max(price, key=lambda item: item[1])
             logger.debug(f'Current price for {current_price[0]} = {current_price[1]}, Last price = {last_price[1]}')
             diff = (current_price[1] - last_price[1]) / last_price[1] * 100
             diff_sign = f'👎' if diff < 0 else f'👍'
-            answer += f'{diff_sign} {markdown.bold(current_price[0].upper())}:\nТекущая цена \- {markdown.code(f'${current_price[1]}')}\nИзменение за 24 часа \= {markdown.bold(f'{round(diff, 2)}%')}\n\n'
+            answer += (f'{diff_sign} {markdown.bold(current_price[0].upper())}:\n'
+                       f'Текущая цена \- {markdown.code(f'${current_price[1]}')}\n'
+                       f'Изменение за 24 часа \= {markdown.bold(f'{round(diff, 2)}%')}\n'
+                       f'Минимум за 24 часа \= {markdown.code(f'${min_price[1]}')}\n'
+                       f'Максимум за 24 часа \= {markdown.code(f'${max_price[1]}')}\n\n')
     if answer == f'Текущие цены:\n':
         await message.answer(f'Цены ещё не обновлены')
     else:
