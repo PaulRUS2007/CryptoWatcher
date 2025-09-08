@@ -2,11 +2,19 @@ import aiosqlite
 from coingecko import fetch_coins_list
 import logging
 import time
+from typing import List, Tuple, Dict, Any, Optional, Union
 
 DB_FILE = "db.sqlite"
 logger = logging.getLogger(__name__)
 
-async def init_db():
+async def init_db() -> None:
+    """
+    Инициализирует базу данных, создает необходимые таблицы
+    и загружает список криптовалют если база пуста
+    
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)""")
         await db.execute("""CREATE TABLE IF NOT EXISTS subscriptions (user_id INTEGER, ticker TEXT, last_alert INTEGER, alert_threshold INTEGER, interval INTEGER)""")
@@ -21,7 +29,16 @@ async def init_db():
             await add_coins_to_list(api_coins_list)
         await db.commit()
 
-async def add_user(user_id: int):
+async def add_user(user_id: int) -> None:
+    """
+    Добавляет нового пользователя в базу данных
+    
+    Args:
+        user_id: Уникальный идентификатор пользователя Telegram
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         INSERT OR IGNORE INTO users (user_id)
@@ -29,7 +46,19 @@ async def add_user(user_id: int):
         """, (user_id,))
         await db.commit()
 
-async def add_subscription(user_id: int, ticker: str, alert_threshold: int = 5, interval: int = 3600):
+async def add_subscription(user_id: int, ticker: str, alert_threshold: int = 5, interval: int = 3600) -> None:
+    """
+    Добавляет новую подписку пользователя на криптовалюту
+    
+    Args:
+        user_id: Идентификатор пользователя
+        ticker: Тикер криптовалюты
+        alert_threshold: Пороговое значение для уведомлений в процентах (по умолчанию 5%)
+        interval: Интервал между уведомлениями в секундах (по умолчанию 3600)
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         INSERT INTO subscriptions (user_id, ticker, last_alert, alert_threshold, interval)
@@ -37,7 +66,17 @@ async def add_subscription(user_id: int, ticker: str, alert_threshold: int = 5, 
         """, (user_id, ticker, time.time(), alert_threshold, interval))
         await db.commit()
 
-async def get_user_subscriptions(user_id: int):
+async def get_user_subscriptions(user_id: int) -> List[Tuple[int, str, float, int, int]]:
+    """
+    Получает все подписки пользователя
+    
+    Args:
+        user_id: Идентификатор пользователя
+        
+    Returns:
+        Список кортежей с данными подписок:
+        [(user_id, ticker, last_alert, alert_threshold, interval), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT user_id, ticker, last_alert, alert_threshold, interval
@@ -46,7 +85,17 @@ async def get_user_subscriptions(user_id: int):
         """, (user_id,))
         return await cursor.fetchall()
 
-async def get_user_subscriptions_by_ticker(ticker: str) -> tuple:
+async def get_user_subscriptions_by_ticker(ticker: str) -> List[Tuple[int, float, int, int]]:
+    """
+    Получает всех пользователей, подписанных на конкретную криптовалюту
+    
+    Args:
+        ticker: Тикер криптовалюты
+        
+    Returns:
+        Список кортежей с данными подписок:
+        [(user_id, last_alert, alert_threshold, interval), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT user_id, last_alert, alert_threshold, interval
@@ -56,6 +105,16 @@ async def get_user_subscriptions_by_ticker(ticker: str) -> tuple:
         return await cursor.fetchall()
 
 async def update_last_alert(user_id: int, ticker: str) -> None:
+    """
+    Обновляет время последнего уведомления для подписки
+    
+    Args:
+        user_id: Идентификатор пользователя
+        ticker: Тикер криптовалюты
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         UPDATE subscriptions
@@ -64,7 +123,16 @@ async def update_last_alert(user_id: int, ticker: str) -> None:
         """, (time.time(), user_id, ticker, ))
         await db.commit()
 
-async def get_user(user_id):
+async def get_user(user_id: int) -> List[Tuple[int]]:
+    """
+    Проверяет существование пользователя в базе данных
+    
+    Args:
+        user_id: Идентификатор пользователя
+        
+    Returns:
+        Список кортежей с данными пользователя или пустой список
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT user_id
@@ -73,7 +141,16 @@ async def get_user(user_id):
         """, (user_id,))
         return await cursor.fetchall()
 
-async def add_coin(ticker: str):
+async def add_coin(ticker: str) -> None:
+    """
+    Добавляет новую криптовалюту в список отслеживаемых
+    
+    Args:
+        ticker: Тикер криптовалюты
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         INSERT INTO coins (ticker)
@@ -81,7 +158,13 @@ async def add_coin(ticker: str):
         """, (ticker, ))
         await db.commit()
 
-async def get_coins():
+async def get_coins() -> List[Tuple[str]]:
+    """
+    Получает список всех отслеживаемых криптовалют
+    
+    Returns:
+        Список кортежей с тикерами: [('bitcoin',), ('ethereum',), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT ticker 
@@ -89,7 +172,16 @@ async def get_coins():
         """)
         return await cursor.fetchall()
 
-async def delete_coins(coin: str):
+async def delete_coins(coin: str) -> None:
+    """
+    Удаляет криптовалюту из списка отслеживаемых, если на неё нет подписок
+    
+    Args:
+        coin: Тикер криптовалюты для удаления
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT user_id
@@ -105,7 +197,16 @@ async def delete_coins(coin: str):
             """, (coin, ))
             await db.commit()
 
-async def add_coins_to_list(coins: list[tuple] or dict):
+async def add_coins_to_list(coins: Union[List[Tuple], List[Dict[str, str]]]) -> None:
+    """
+    Добавляет список криптовалют в справочник
+    
+    Args:
+        coins: Список криптовалют в формате кортежей или словарей
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.executemany("""
         INSERT INTO coins_list (ticker, symbol, name)
@@ -113,7 +214,14 @@ async def add_coins_to_list(coins: list[tuple] or dict):
         """, coins)
         await db.commit()
 
-async def get_coins_from_list():
+async def get_coins_from_list() -> List[Tuple[str, str, str]]:
+    """
+    Получает полный список криптовалют из справочника
+    
+    Returns:
+        Список кортежей с данными криптовалют:
+        [('bitcoin', 'btc', 'Bitcoin'), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT ticker, symbol, name
@@ -121,7 +229,16 @@ async def get_coins_from_list():
         """)
         return await cursor.fetchall()
 
-async def get_coin_from_list(ticker: str):
+async def get_coin_from_list(ticker: str) -> List[Tuple[str, str, str]]:
+    """
+    Ищет криптовалюту в справочнике по тикеру
+    
+    Args:
+        ticker: Тикер криптовалюты для поиска
+        
+    Returns:
+        Список кортежей с данными найденных криптовалют
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
                             SELECT ticker, symbol, name
@@ -130,7 +247,18 @@ async def get_coin_from_list(ticker: str):
                             """, (ticker, ))
         return await cursor.fetchall()
 
-async def add_prices(prices: list or dict):
+async def add_prices(prices: Union[List[Tuple[str, float, int]], List[Dict[str, Any]]]) -> None:
+    """
+    Добавляет историю цен в базу данных
+    
+    Args:
+        prices: Список данных о ценах в формате:
+               [(ticker, price, timestamp), ...] или
+               [{"ticker": "bitcoin", "price": 50000.0, "timestamp": 1234567890}, ...]
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.executemany("""
         INSERT INTO prices (ticker, price, timestamp)
@@ -138,7 +266,17 @@ async def add_prices(prices: list or dict):
         """, prices)
         await db.commit()
 
-async def get_last_prices_for_subs_list(subs: list, period: int) -> list:
+async def get_last_prices_for_subs_list(subs: List[Tuple], period: int) -> List[List[Tuple[str, float, int]]]:
+    """
+    Получает историю цен за указанный период для списка подписок
+    
+    Args:
+        subs: Список подписок пользователя
+        period: Период в секундах для получения цен
+        
+    Returns:
+        Список списков с историей цен для каждой подписки
+    """
     prices = []
     now = time.time()
     async with aiosqlite.connect(DB_FILE) as db:
@@ -157,7 +295,17 @@ async def get_last_prices_for_subs_list(subs: list, period: int) -> list:
             prices.append(await cursor.fetchall())
     return prices
 
-async def get_last_prices_for_ticker(ticker: str, period: int):
+async def get_last_prices_for_ticker(ticker: str, period: int) -> List[Tuple[str, float, int]]:
+    """
+    Получает историю цен для конкретной криптовалюты за указанный период
+    
+    Args:
+        ticker: Тикер криптовалюты
+        period: Период в секундах
+        
+    Returns:
+        Список кортежей с историей цен: [(ticker, price, timestamp), ...]
+    """
     now = time.time()
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
@@ -170,6 +318,15 @@ async def get_last_prices_for_ticker(ticker: str, period: int):
         return await cursor.fetchall()
 
 async def delete_old_prices(period: int) -> None:
+    """
+    Удаляет старые записи о ценах из базы данных
+    
+    Args:
+        period: Возраст записей в секундах, старше которых нужно удалить
+        
+    Returns:
+        None
+    """
     now = time.time()
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
@@ -179,6 +336,16 @@ async def delete_old_prices(period: int) -> None:
         await db.commit()
 
 async def delete_user_subscription(user_id: int, ticker: str) -> None:
+    """
+    Удаляет подписку пользователя на криптовалюту
+    
+    Args:
+        user_id: Идентификатор пользователя
+        ticker: Тикер криптовалюты
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         DELETE FROM subscriptions
@@ -187,7 +354,19 @@ async def delete_user_subscription(user_id: int, ticker: str) -> None:
         """, (user_id, ticker, ))
         await db.commit()
 
-async def update_user_subscription(user_id: int, ticker: str, threshold: int = 1, timeout: int = 3600):
+async def update_user_subscription(user_id: int, ticker: str, threshold: int = 1, timeout: int = 3600) -> None:
+    """
+    Обновляет настройки подписки пользователя
+    
+    Args:
+        user_id: Идентификатор пользователя
+        ticker: Тикер криптовалюты
+        threshold: Новое пороговое значение в процентах
+        timeout: Новый интервал уведомлений в секундах
+        
+    Returns:
+        None
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         UPDATE subscriptions
@@ -197,7 +376,17 @@ async def update_user_subscription(user_id: int, ticker: str, threshold: int = 1
         """, (threshold, timeout, user_id, ticker))
         await db.commit()
 
-async def get_user_subscriptions_settings(user_id: int, ticker: str):
+async def get_user_subscriptions_settings(user_id: int, ticker: str) -> List[Tuple[int, int]]:
+    """
+    Получает настройки конкретной подписки пользователя
+    
+    Args:
+        user_id: Идентификатор пользователя
+        ticker: Тикер криптовалюты
+        
+    Returns:
+        Список кортежей с настройками: [(alert_threshold, interval), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
                 SELECT alert_threshold, interval
@@ -207,7 +396,13 @@ async def get_user_subscriptions_settings(user_id: int, ticker: str):
                 """, (user_id, ticker, ))
         return await cursor.fetchall()
 
-async def get_max_interval_from_subscriptions():
+async def get_max_interval_from_subscriptions() -> List[Tuple[Optional[int]]]:
+    """
+    Получает максимальный интервал уведомлений среди всех подписок
+    
+    Returns:
+        Список кортежей с максимальным интервалом: [(max_interval,), ...]
+    """
     async with aiosqlite.connect(DB_FILE) as db:
         cursor = await db.execute("""
         SELECT MAX(interval)

@@ -6,6 +6,7 @@ from aiogram import Bot
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils import markdown
 import time
+from typing import List, Dict, Tuple, Set, Any
 
 logger = logging.getLogger(__name__)
 # Порог для алерта
@@ -13,25 +14,33 @@ logger = logging.getLogger(__name__)
 # Интервал уведомлений
 # INTERVAL = 3600
 
-async def get_subscribed_users(coins: list):
+async def get_subscribed_users(coins: List[Tuple[str]]) -> Tuple[Set[str], Dict[str, List[Tuple[int, float, int, int]]]]:
     """
-    Получает список подписанных юзеров
-    :param coins:
-    :return:
+    Получает список пользователей, подписанных на отслеживаемые криптовалюты
+    
+    Args:
+        coins: Список отслеживаемых криптовалют
+        
+    Returns:
+        Кортеж из множества тикеров и словаря с подписками пользователей
     """
-    user_map = {}
-    tickers = set()
+    user_map: Dict[str, List[Tuple[int, float, int, int]]] = {}
+    tickers: Set[str] = set()
     for ticker in coins:  # получаем список юзеров, подписанных на обновления
         tickers.add(ticker[0])
         user_map[ticker[0]] = await get_user_subscriptions_by_ticker(ticker[0])
     return tickers, user_map
 
-async def add_new_prices(prices: dict, now: time.time):
+async def add_new_prices(prices: Dict[str, Dict[str, float]], now: float) -> None:
     """
-    Получаем и добавляем в БД новые цены
-    :param now:
-    :param prices:
-    :return:
+    Добавляет новые цены криптовалют в базу данных
+    
+    Args:
+        prices: Словарь с ценами в формате {ticker: {"usd": price}}
+        now: Текущее время в формате timestamp
+        
+    Returns:
+        None
     """
     new_prices = []
     for price in prices:
@@ -41,17 +50,21 @@ async def add_new_prices(prices: dict, now: time.time):
         new_prices.append((price, usd, now))
     await add_prices(new_prices)  # добавляем текущие цены в БД
 
-async def send_message(bot: Bot, ticker: str, now: time.time, timestamp: time.time, subscription: list, diff: int, current_price: int) -> None:
+async def send_message(bot: Bot, ticker: str, now: float, timestamp: float, subscription: List[Tuple[int, float, int, int]], diff: float, current_price: float) -> None:
     """
-    Отправляет алерт
-    :param subscription:
-    :param current_price:
-    :param diff:
-    :param bot:
-    :param ticker:
-    :param now:
-    :param timestamp:
-    :return:
+    Отправляет уведомление пользователям о значительном изменении цены
+    
+    Args:
+        bot: Экземпляр Telegram бота
+        ticker: Тикер криптовалюты
+        now: Текущее время
+        timestamp: Время последнего изменения цены
+        subscription: Список подписок пользователей
+        diff: Процент изменения цены
+        current_price: Текущая цена
+        
+    Returns:
+        None
     """
     change_time = int(round((now - timestamp) / 60, 0))
     change_hours = int(change_time // 60)
@@ -72,7 +85,7 @@ async def send_message(bot: Bot, ticker: str, now: time.time, timestamp: time.ti
         change_text = f'последние {change_minutes} минут' if change_hours == 0 else f'{change_text_hours} {change_minutes} минут'
 
     sign = "📈" if diff > 0 else "📉"
-    diff_text = f'вырос' if diff > 0 else f'упал'
+    diff_text = 'вырос' if diff > 0 else 'упал'
     msg = f'{sign} {markdown.bold(ticker.upper())} {markdown.bold(diff_text)} на {markdown.code(f'{diff}%')} за {change_text}\!\nТекущая цена: {markdown.code(f'${current_price}')}'
     logger.debug(f'Message to send: {msg}')
     for user, last_alert, alert_threshold, interval in subscription:
@@ -80,7 +93,19 @@ async def send_message(bot: Bot, ticker: str, now: time.time, timestamp: time.ti
             await bot.send_message(user, msg, parse_mode=ParseMode.MARKDOWN_V2)
             await update_last_alert(user, ticker)
 
-async def check_prices(bot: Bot):
+async def check_prices(bot: Bot) -> None:
+    """
+    Основная функция проверки цен и отправки уведомлений
+    
+    Получает текущие цены, сравнивает с историческими данными
+    и отправляет уведомления при превышении пороговых значений
+    
+    Args:
+        bot: Экземпляр Telegram бота
+        
+    Returns:
+        None
+    """
     coins = await get_coins()
     logger.info(f'Coins for checking prices: {coins}')
     if not coins:
@@ -138,8 +163,12 @@ async def check_prices(bot: Bot):
 
 async def coins_list_worker() -> None:
     """
-    Получаем список монет и сравниваем их с локальным. Если есть разница - обновляем локальный список
-    :return:
+    Обновляет локальный список криптовалют из API CoinGecko
+    
+    Сравнивает локальный список с API и добавляет новые криптовалюты
+    
+    Returns:
+        None
     """
     local_coins_list = await get_coins_from_list()
     api_coins_list = await fetch_coins_list()
@@ -152,12 +181,30 @@ async def coins_list_worker() -> None:
 
 async def clear_db() -> None:
     """
-    Очищает БД от старых цен
-    :return:
+    Очищает базу данных от старых записей о ценах
+    
+    Удаляет записи старше 3 дней (259200 секунд)
+    
+    Returns:
+        None
     """
     await delete_old_prices(259200)
 
-async def start_scheduler(bot: Bot):
+async def start_scheduler(bot: Bot) -> None:
+    """
+    Запускает планировщик задач для фоновых операций
+    
+    Инициализирует базу данных и настраивает периодические задачи:
+    - Проверка цен каждые 60 секунд
+    - Обновление списка криптовалют каждые 24 часа
+    - Очистка старых данных каждый час
+    
+    Args:
+        bot: Экземпляр Telegram бота
+        
+    Returns:
+        None
+    """
     from database import init_db
     await init_db()
     scheduler = AsyncIOScheduler()
