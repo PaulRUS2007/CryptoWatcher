@@ -7,7 +7,7 @@ from aiogram.filters import Command
 
 from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, get_last_prices_for_subs_list, get_coin_from_list, get_coins_from_list, delete_user_subscription, update_user_subscription, get_user_subscriptions_settings, delete_coins
 from coingecko import fetch_prices
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.enums.parse_mode import ParseMode
@@ -158,7 +158,8 @@ async def callback_subscribe(callback: types.CallbackQuery, state: FSMContext) -
         else:
             logger.debug(f'User {callback.from_user.id} was already subscribed to {slug}')
             await callback.message.answer(f'Вы уже были подписаны на {slug} ранее')
-    await callback.message.answer('Добро пожаловать! Выберите, что вы хотите сделать:',
+    if slug != 'other':
+        await callback.message.answer('Добро пожаловать! Выберите, что вы хотите сделать:',
                                       reply_markup=get_main_menu())
 
 @router.message(SubscribeState.waiting_for_ticker)
@@ -173,7 +174,22 @@ async def process_manual_ticker(message: types.Message, state: FSMContext) -> No
     Returns:
         None
     """
-    ticker = message.text.strip().lower()
+    text = message.text.strip()
+    # Если пользователь нажал кнопку главного меню во время ожидания тикера —
+    # очищаем состояние и перенаправляем в соответствующий обработчик
+    main_menu_actions = {
+        'Текущие цены': handle_get_prices,
+        'Мои подписки': handle_my_subs,
+        'Новая подписка': handle_add_new_sub,
+        'Настройки': handle_user_settings,
+        '/start': cmd_start,
+    }
+    if text in main_menu_actions:
+        await state.clear()
+        await main_menu_actions[text](message)
+        return
+
+    ticker = text.lower()
     success = False
     if not ticker.isalpha():
         await message.answer("Некорректный тикер. Попробуйте ещё раз.")
@@ -197,9 +213,8 @@ async def process_manual_ticker(message: types.Message, state: FSMContext) -> No
         # await message.reply(f'Возможно имелось ввиду {similar[0]}?')
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=s, callback_data=f"sub:{s}")]
-                for s in similar
-            ]
+                [InlineKeyboardButton(text=s, callback_data=f"sub:{s}")] for s in similar
+            ] + [[InlineKeyboardButton(text='Отмена', callback_data=f'cancel:')]]
         )
         await message.reply('Возможно имелось ввиду:', reply_markup=kb)
     finally:
@@ -208,6 +223,15 @@ async def process_manual_ticker(message: types.Message, state: FSMContext) -> No
         else:
             return
         # await state.set_state(SubscribeState.waiting_for_ticker)
+
+@router.callback_query(F.data.startswith("cancel:"))
+async def cancel_subscription(callback: CallbackQuery, state: FSMContext):
+    """
+    Обработчик кнопки "Отмена"
+    """
+    await state.clear()  # очищаем состояние FSM
+    await callback.message.edit_text("Действие отменено ✅")
+    await callback.answer()
 
 @router.message(F.text=='Мои подписки')
 async def handle_my_subs(message: types.Message) -> None:

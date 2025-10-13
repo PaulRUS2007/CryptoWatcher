@@ -59,6 +59,11 @@ async def add_subscription(user_id: int, ticker: str, alert_threshold: int = 5, 
     Returns:
         None
     """
+    if ticker == 'bitcoin':
+        alert_threshold = 1
+        interval = 7200
+    elif ticker == 'dogecoin' or ticker == 'ethereum':
+        alert_threshold = 2
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute("""
         INSERT INTO subscriptions (user_id, ticker, last_alert, alert_threshold, interval)
