@@ -1,18 +1,35 @@
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from database import get_coins, add_coins_to_list, get_coins_from_list, add_prices, get_last_prices_for_subs_list, get_user_subscriptions_by_ticker, delete_old_prices, update_last_alert, get_max_interval_from_subscriptions, get_last_prices_for_ticker
-from coingecko import fetch_prices, fetch_coins_list
+from database import get_coins, add_coins_to_list, get_coins_from_list, add_prices, get_user_subscriptions_by_ticker, delete_old_prices, update_last_alert, \
+    get_last_prices_for_ticker, get_cbrf_users
+from services.cbr_service import CBRService
+from services.coingecko import fetch_prices, fetch_coins_list
 from aiogram import Bot
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils import markdown
 import time
-from typing import List, Dict, Tuple, Set, Any
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Tuple, Set
+
+from config.config import config
 
 logger = logging.getLogger(__name__)
 # Порог для алерта
 # ALERT_THRESHOLD = 0.01
 # Интервал уведомлений
 # INTERVAL = 3600
+USD_CBR = CBRService('USD', period='W')
+EUR_CBR = CBRService('EUR', period='W')
+LAST_CBRF_ALERT: datetime = datetime.now() - timedelta(days=1)
+
+
+def is_cbrf_alert_need() -> bool:
+    now = datetime.now(tz=timezone(timedelta(hours=config.TIME_ZONE)))
+    if LAST_CBRF_ALERT.date() < now.date():
+        return True
+    else:
+        return False
+
 
 async def get_subscribed_users(coins: List[Tuple[str]]) -> Tuple[Set[str], Dict[str, List[Tuple[int, float, int, int]]]]:
     """
@@ -86,7 +103,7 @@ async def send_message(bot: Bot, ticker: str, now: float, timestamp: float, subs
 
     sign = "📈" if diff > 0 else "📉"
     diff_text = 'вырос' if diff > 0 else 'упал'
-    msg = f'{sign} {markdown.bold(ticker.upper())} {markdown.bold(diff_text)} на {markdown.code(f'{diff}%')} за {change_text}\!\nТекущая цена: {markdown.code(f'${current_price}')}'
+    msg = f'{sign} {markdown.bold(ticker.upper())} {markdown.bold(diff_text)} на {markdown.code(f'{diff}%')} за {change_text}\\!\nТекущая цена: {markdown.code(f'${current_price}')}'
     logger.debug(f'Message to send: {msg}')
     for user, last_alert, alert_threshold, interval in subscription:
         if now - last_alert > interval:
@@ -111,9 +128,6 @@ async def check_prices(bot: Bot) -> None:
     if not coins:
         return
     tickers, user_map = await get_subscribed_users(coins)
-    # interval = (await get_max_interval_from_subscriptions())[0][0]
-    # price_history = await get_last_prices_for_subs_list(coins, interval)
-    # logger.debug(f'Price history: {price_history}, type: {type(price_history)}')
     logger.debug(f'User map: {user_map}')
     logger.debug(f'Tickers: {tickers}')
     prices = await fetch_prices(list(tickers))
@@ -141,25 +155,24 @@ async def check_prices(bot: Bot) -> None:
                 )
                 break
 
-"""    for ticker in tickers:
-        current_price = prices.get(ticker, {}).get('usd')
-        if current_price is None:
-            continue
-        history = [x for y in price_history for x in y if ticker in x]
-        for ticker_name, price, timestamp in history:
-            if abs(current_price - price)/price > ALERT_THRESHOLD:
-                diff = round((current_price - price)/price * 100, 2)
-                await send_message(
-                    bot=bot,
-                    ticker=ticker,
-                    now=now,
-                    timestamp=timestamp,
-                    users=user_map,
-                    diff=diff,
-                    current_price=current_price,
-                )
-                break"""
+async def cbrf_scheduler(bot: Bot) -> None:
+    """
+    Отправляет сообщения всем подписавшимся на уведомления о курсах ЦБ
+    Args:
+        bot: Bot
 
+    Returns:
+        None
+    """
+    global LAST_CBRF_ALERT
+    await EUR_CBR.update_rates()
+    await USD_CBR.update_rates()
+    if (await EUR_CBR.is_updated() or await USD_CBR.is_updated()) and is_cbrf_alert_need():
+        users = await get_cbrf_users()
+        msg = f'ЦБ РФ обновил курсы валют\n\n{await USD_CBR.get_last_rate()}\n___________________________________\n\n{await EUR_CBR.get_last_rate()}'
+        for user in users:
+            await bot.send_message(user, msg, parse_mode=ParseMode.HTML)
+        LAST_CBRF_ALERT = datetime.now(tz=timezone(timedelta(hours=config.TIME_ZONE)))
 
 async def coins_list_worker() -> None:
     """
@@ -208,7 +221,26 @@ async def start_scheduler(bot: Bot) -> None:
     from database import init_db
     await init_db()
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(check_prices, "interval", seconds=60, args=[bot])
-    scheduler.add_job(coins_list_worker, 'interval', seconds=86400)
-    scheduler.add_job(clear_db, 'interval', seconds=3600)
+    scheduler.add_job(
+        check_prices,
+        "interval",
+        seconds=60,
+        args=[bot]
+    )
+    scheduler.add_job(
+        coins_list_worker,
+        'interval',
+        seconds=86400
+    )
+    scheduler.add_job(
+        clear_db,
+        'interval',
+        seconds=3600
+    )
+    scheduler.add_job(
+        cbrf_scheduler,
+        'interval',
+        seconds=1800,
+        args=[bot]
+    )
     scheduler.start()

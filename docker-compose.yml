@@ -1,0 +1,8 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    container_name: CryptoWatcher
+    volumes:
+      - ./db.sqlite:/app/db.sqlite

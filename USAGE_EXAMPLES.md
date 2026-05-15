@@ -172,25 +172,27 @@ python bot.py
 
 ```python
 import asyncio
-from coingecko import fetch_prices, fetch_coins_list
+from services.coingecko import fetch_prices, fetch_coins_list
 from database import add_user, add_subscription, get_user_subscriptions
+
 
 async def example_usage():
     # Получение цен
     prices = await fetch_prices(['bitcoin', 'ethereum'])
     print(f"Bitcoin price: ${prices['bitcoin']['usd']}")
-    
+
     # Получение списка криптовалют
     coins = await fetch_coins_list()
     print(f"Total coins available: {len(coins)}")
-    
+
     # Работа с пользователями
     await add_user(12345)
     await add_subscription(12345, 'bitcoin', alert_threshold=5, interval=3600)
-    
+
     # Получение подписок
     subs = await get_user_subscriptions(12345)
     print(f"User subscriptions: {subs}")
+
 
 # Запуск примера
 asyncio.run(example_usage())

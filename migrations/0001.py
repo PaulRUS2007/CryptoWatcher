@@ -2,10 +2,11 @@ import asyncio
 
 import aiosqlite
 
-DB_FILE = "../db.sqlite"
+DB_FILE = "./db.sqlite"
 
 async def make_migration():
     async with aiosqlite.connect(DB_FILE) as db:
+        print(DB_FILE)
         await db.execute("""
         ALTER TABLE subscriptions
         ADD COLUMN alert_threshold INTEGER

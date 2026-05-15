@@ -3,14 +3,13 @@ import logging
 from aiogram import Bot, Dispatcher
 from handlers import router
 from scheduler import start_scheduler
-from dotenv import load_dotenv
-import os
+from config.config import config
+
 from typing import Optional
 
-load_dotenv()
+
 logger = logging.getLogger(__name__)
-BOT_TOKEN: Optional[str] = os.getenv('TELEGRAM_API_KEY')
-LOG_LEVEL: Optional[str] = os.getenv('LOG_LEVEL')
+
 
 async def main() -> None:
     """
@@ -22,7 +21,7 @@ async def main() -> None:
     Returns:
         None
     """
-    bot = Bot(token=BOT_TOKEN)
+    bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
     await start_scheduler(bot) # запускам планировщик на каждые 60 секунд
@@ -32,6 +31,6 @@ if __name__ == "__main__":
     """
     Настраиваем логи и запускаем бота
     """
-    logging.basicConfig(level=LOG_LEVEL)
+    logging.basicConfig(level=config.LOG_LEVEL)
     logger.info(f'Starting bot...')
     asyncio.run(main())

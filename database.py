@@ -1,5 +1,5 @@
 import aiosqlite
-from coingecko import fetch_coins_list
+from services.coingecko import fetch_coins_list
 import logging
 import time
 from typing import List, Tuple, Dict, Any, Optional, Union
@@ -15,8 +15,9 @@ async def init_db() -> None:
     Returns:
         None
     """
+    logger.debug(f'Init DB')
     async with aiosqlite.connect(DB_FILE) as db:
-        await db.execute("""CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, is_cbrf_subscribed BOOLEAN DEFAULT FALSE)""")
         await db.execute("""CREATE TABLE IF NOT EXISTS subscriptions (user_id INTEGER, ticker TEXT, last_alert INTEGER, alert_threshold INTEGER, interval INTEGER)""")
         await db.execute("""CREATE TABLE IF NOT EXISTS prices (ticker TEXT, price REAL, timestamp INTEGER)""")
         await db.execute("""CREATE TABLE IF NOT EXISTS coins (id INTEGER PRIMARY KEY, ticker TEXT)""")
@@ -194,7 +195,6 @@ async def delete_coins(coin: str) -> None:
         WHERE ticker = (?)
         """, (coin, ))
         subs = await cursor.fetchall()
-        print(f'Subs: {subs}')
         if not subs:
             await db.execute("""
             DELETE FROM coins
@@ -414,3 +414,54 @@ async def get_max_interval_from_subscriptions() -> List[Tuple[Optional[int]]]:
         FROM subscriptions
         """)
         return await cursor.fetchall()
+
+async def check_cbrf_subscription(user_id: int) -> bool:
+    """
+    Проверяет подписку на курс валют ЦБРФ
+    Returns:
+        True or False
+    """
+    async with aiosqlite.connect(DB_FILE) as db:
+        cursor = await db.execute("""
+        SELECT is_cbrf_subscribed
+        FROM users
+        WHERE user_id = (?)
+        """ , (user_id, ))
+        row = await cursor.fetchone()
+        return bool(row[0])
+
+async def cbrf_subscribe(user_id: int, action: bool) -> bool:
+    """
+    Подписка на ЦБ РФ
+    Args:
+        action: Подписка или отписка
+        user_id: User ID
+
+    Returns:
+        True or False
+    """
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("""
+        UPDATE users
+        SET is_cbrf_subscribed = (?)
+        WHERE user_id = (?)
+        """, (action, user_id))
+        await db.commit()
+        return True
+
+async def get_cbrf_users() -> tuple[int]:
+    """
+    Проверяет существование пользователя в базе данных
+
+    Args:
+
+    Returns:
+        Список кортежей с данными пользователя или пустой список
+    """
+    async with aiosqlite.connect(DB_FILE) as db:
+        cursor = await db.execute("""
+        SELECT user_id
+        FROM users
+        WHERE is_cbrf_subscribed = True
+        """, ())
+        return (await cursor.fetchall())[0]

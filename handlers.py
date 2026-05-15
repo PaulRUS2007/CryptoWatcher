@@ -1,21 +1,26 @@
 import logging
 from difflib import get_close_matches
-from typing import List, Dict, Any, Optional
 
 from aiogram import Router, types, F
 from aiogram.filters import Command
 
-from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, get_last_prices_for_subs_list, get_coin_from_list, get_coins_from_list, delete_user_subscription, update_user_subscription, get_user_subscriptions_settings, delete_coins
-from coingecko import fetch_prices
+from database import add_user, add_subscription, get_user_subscriptions, get_user, add_coin, get_coins, \
+    get_last_prices_for_subs_list, get_coin_from_list, get_coins_from_list, delete_user_subscription, \
+    update_user_subscription, get_user_subscriptions_settings, delete_coins, check_cbrf_subscription, cbrf_subscribe
+from services.coingecko import fetch_prices
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils import markdown
 from aiosqlite import Error as SQLError
+from services.cbr_service import CBRService
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+USD_CBR = CBRService('USD', period='W')
+EUR_CBR = CBRService('EUR', period='W')
 
 available_tickers = {"BitCoin": "bitcoin", "DogeCoin": "dogecoin", "Ethereum": "ethereum", "Other": "other"}
 
@@ -33,6 +38,7 @@ def get_main_menu() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text='Текущие цены')],
         [KeyboardButton(text='Мои подписки'),KeyboardButton(text='Новая подписка')],
+        [KeyboardButton(text='Курсы валют ЦБ')],
     ]
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -53,7 +59,7 @@ def gen_ticker_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=ticker, callback_data=f"sub:{slug}")]
             for ticker, slug in available_tickers.items()
-        ]
+        ],
     )
 
 async def check_ticker_in_db(slug: str) -> bool:
@@ -308,10 +314,10 @@ async def handle_get_prices(message: types.Message) -> None:
             diff = (current_price[1] - last_price[1]) / last_price[1] * 100
             diff_sign = '👎' if diff < 0 else '👍'
             answer += (f'{diff_sign} {markdown.bold(current_price[0].upper())}:\n'
-                       f'Текущая цена \- {markdown.code(f'${current_price[1]}')}\n'
-                       f'Изменение за 24 часа \= {markdown.bold(f'{round(diff, 2)}%')}\n'
-                       f'Минимум за 24 часа \= {markdown.code(f'${min_price[1]}')}\n'
-                       f'Максимум за 24 часа \= {markdown.code(f'${max_price[1]}')}\n\n')
+                       f'Текущая цена \\- {markdown.code(f'${current_price[1]}')}\n'
+                       f'Изменение за 24 часа \\= {markdown.bold(f'{round(diff, 2)}%')}\n'
+                       f'Минимум за 24 часа \\= {markdown.code(f'${min_price[1]}')}\n'
+                       f'Максимум за 24 часа \\= {markdown.code(f'${max_price[1]}')}\n\n')
     if answer == 'Текущие цены:\n':
         await message.answer('Цены ещё не обновлены')
     else:
@@ -466,3 +472,30 @@ async def process_ticker_setting(message: types.Message, state: FSMContext) -> N
             await message.answer('Неверное значение. Значение должно быть целым числом от 1 до 24')
     finally:
         await state.clear()
+
+@router.message(F.text == 'Курсы валют ЦБ')
+async def get_cbr_currencies(message: types.Message):
+    await USD_CBR.update_rates()
+    await EUR_CBR.update_rates()
+    answer = ''
+    if await USD_CBR.is_updated() or await EUR_CBR.is_updated():
+        answer = answer.join(f'ЦБ РФ обновил курсы валют на сегодня\n\n')
+    currency = f'{await USD_CBR.get_last_rate()}\n___________________________________\n\n{await EUR_CBR.get_last_rate()}'
+    answer += currency
+    action = True if await check_cbrf_subscription(message.from_user.id) else False
+    action_text = f'Подписаться' if not action else f'Отписаться'
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f'{action_text}', callback_data=f"cbrf:subscribe:{action}")]
+        ]
+    )
+
+    await message.answer(answer, reply_markup=kb)
+
+@router.callback_query(F.data.startswith('cbrf:subscribe'))
+async def subscribe_cbrf(message: types.Message, state: FSMContext):
+    action = True if 'false' in message.data.lower() else False
+    result = await cbrf_subscribe(message.from_user.id, action)
+    action_text = f'Подписка активирована' if action else f'Подписка отменена'
+    if result:
+        await message.answer(f'{action_text}', reply_markup=get_main_menu())
