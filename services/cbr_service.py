@@ -62,7 +62,8 @@ class CBRService:
             today_price = float(list(self.rates.values())[-2])
             tomorrow_price = float(list(self.rates.values())[-1])
             sign = f'✅' if tomorrow_price > today_price else f'❌'
-            return f'❗ Курс {self.symbol} сегодня: {today_price:.2f}\n{sign} Курс {self.symbol} завтра: {tomorrow_price:.2f}'
+            desc = f'Рост' if tomorrow_price > today_price else f'Падение'
+            return f'❗ Курс {self.symbol} сегодня: {today_price:.2f}\n{sign} Курс {self.symbol} завтра: {tomorrow_price:.2f}\n{desc} на {abs(tomorrow_price-today_price)} руб.'
         else:
             return f'Курс {self.symbol} не изменился\nТекущий курс ЦБ РФ: {float(list(self.rates.values())[-1]):.2f}'
 
