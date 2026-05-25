@@ -6,3 +6,4 @@ services:
     container_name: CryptoWatcher
     volumes:
       - ./db.sqlite:/app/db.sqlite
+    restart: unless-stopped
